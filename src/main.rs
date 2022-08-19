@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::os::unix::prelude::MetadataExt;
 use std::sync::{Arc, Mutex};
 use std::{error::Error, fs};
@@ -74,8 +75,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let abort = |_: i32, _: i32, _: i32, _: i32| std::process::exit(-1);
 
-    fn test_log(mut ctx: FunctionEnvMut<'_, Env>, string_ptr: i32) {
-        let env = ctx.data();
+    fn test_log(ctx: FunctionEnvMut<'_, Env>, string_ptr: i32) {
+        let env = &ctx.data().to_owned();
         let view = env.memory_view(&ctx);
 
         let ptr: WasmPtr<u16> = WasmPtr::new(string_ptr as _);
@@ -88,25 +89,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         let values_sliced = values.read_to_vec().expect("qaq");
         let result = String::from_utf16_lossy(values_sliced.as_slice());
         println!("{:#}", result);
-        println!("{:?}", env.fn_new());
-
-        // let new_str = String::from("hello, assemblyscript");
-        // let new_str_size: i32 = new_str.len().try_into().expect("can't convert to i32");
-        
-        // let new_ctx =  Arc::new(ctx).clone();
-        // new_ctx.as_mut();
-        // let x: &mut FunctionEnvMut<'_, Env> = &mut ctx.as_mut();
-        // ctx.as_mut();
-        // ctx.as_store_mut().as_store_mut();
-        // let x = env.fn_new().call(&mut ctx.as_mut(), &[]);
-        // let v  = &mut ctx.as_mut()
-        // env.fn_new().call(store, params)
-
-        // env.memory().grow(&ctx, delta)
     }
 
-    // Function::new(store, ty, func)
-    // Function::new_typed(store, func)
+    fn test_to_as(mut ctx: FunctionEnvMut<'_, Env>, string_ptr: i32) {
+        let env = &ctx.data().to_owned();
+        let view = env.memory_view(&ctx);
+
+        let new_str = String::from("hello, assemblyscript");
+        let new_str_size: i32 = new_str.len().try_into().expect("can't convert to i32");
+
+        let new_str_ptr = env
+            .fn_new()
+            .call(&mut ctx, &[Value::I32(new_str_size << 1), Value::I32(1)])
+            .expect("can't get new ptr");
+        println!("{:?}", new_str_ptr);
+    }
 
     let env = FunctionEnv::new(&mut store, Env::new());
     let import_object = imports! {
@@ -114,7 +111,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "abort" => Function::new_typed(&mut store, abort)
         },
         "index" => {
-            "log" => Function::new_typed_with_env(&mut store, &env , test_log)
+            "log" => Function::new_typed_with_env(&mut store, &env , test_to_as)
         }
     };
     let instance = Instance::new(&mut store, &module, &import_object)?;
