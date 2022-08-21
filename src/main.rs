@@ -72,6 +72,23 @@ impl Env {
     }
 }
 
+fn lift_string(ctx: &FunctionEnvMut<'_, Env>, string_ptr: i32) -> anyhow::Result<String> {
+    let env = ctx.data();
+    let view = env.memory_view(&ctx);
+
+    let ptr: WasmPtr<u16> = WasmPtr::new(string_ptr as _);
+    let offset = ptr.offset() / 4 - 1;
+    // in assemblyscript, string's offset is -4
+    // ptr / 4 - 1 if for u32, for u8, it need to be expanded 4 times
+    let size = view.read_u8(offset as u64 * 4)?;
+    // u8 -> u16, need / 2
+    let values = ptr.slice(&view, size as u32 / 2)?;
+    let values_sliced = values.read_to_vec().expect("qaq");
+    let result = String::from_utf16_lossy(values_sliced.as_slice());
+
+    Ok(result)
+}
+
 fn lower_string(ctx: &mut FunctionEnvMut<'_, Env>, value: &String) -> anyhow::Result<u32> {
     let env = ctx.data().to_owned();
 
@@ -80,17 +97,11 @@ fn lower_string(ctx: &mut FunctionEnvMut<'_, Env>, value: &String) -> anyhow::Re
         .fn_new()
         .call(ctx, &[Value::I32(str_size << 1), Value::I32(1)])?;
 
-    let ptr = match result.get(0) {
-        Some(v) => match v.i32() {
-            Some(i) => i,
-            _ => {
-                return Err(anyhow!("can't get new string pointer"));
-            }
-        },
-        None => {
-            return Err(anyhow!("can't get new string pointer"));
-        }
-    };
+    let ptr = result
+        .get(0)
+        .ok_or(anyhow!("can't get new string pointer"))?
+        .i32()
+        .ok_or(anyhow!("can't get new string pointer"))?;
 
     let utf16: Vec<u16> = value.encode_utf16().collect();
     let utf16_to_u8: &[u8] = bytemuck::try_cast_slice(&utf16.as_slice()).expect("qaq");
@@ -101,6 +112,17 @@ fn lower_string(ctx: &mut FunctionEnvMut<'_, Env>, value: &String) -> anyhow::Re
     env.fn_pin().call(ctx, &[Value::I32(ptr)])?;
 
     Ok(ptr as u32)
+}
+
+fn test_log(ctx: FunctionEnvMut<'_, Env>, string_ptr: i32) -> Result<(), RuntimeError> {
+    let result = match lift_string(&ctx, string_ptr) {
+        Ok(result) => result,
+        Err(err) => return Err(RuntimeError::new(err.to_string())),
+    };
+
+    println!("{:#}", result);
+
+    Ok(())
 }
 
 fn get_string(mut ctx: FunctionEnvMut<'_, Env>) -> Result<u32, RuntimeError> {
@@ -123,23 +145,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let module = Module::new(&store, wasm_bytes)?;
 
     let abort = |_: i32, _: i32, _: i32, _: i32| std::process::exit(-1);
-
-    fn test_log(ctx: FunctionEnvMut<'_, Env>, string_ptr: i32) {
-        let env = &ctx.data().to_owned();
-        let view = env.memory_view(&ctx);
-
-        let ptr: WasmPtr<u16> = WasmPtr::new(string_ptr as _);
-        let offset = ptr.offset() / 4 - 1;
-        // in assemblyscript, string's offset is -4
-        // ptr / 4 - 1 if for u32, for u8, it need to be expanded 4 times
-        let size = view.read_u8(offset as u64 * 4).expect("can't get size");
-        // u8 -> u16, need / 2
-        let values = ptr.slice(&view, size as u32 / 2).expect("can't get by ptr");
-        let values_sliced = values.read_to_vec().expect("qaq");
-        let result = String::from_utf16_lossy(values_sliced.as_slice());
-
-        println!("{:#}", result);
-    }
 
     let env = FunctionEnv::new(&mut store, Env::new());
     let import_object = imports! {
