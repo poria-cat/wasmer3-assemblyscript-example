@@ -1,23 +1,10 @@
 use anyhow::anyhow;
-use std::borrow::BorrowMut;
-use std::os::unix::prelude::MetadataExt;
-use std::sync::{Arc, Mutex};
+use bytemuck;
 use std::{error::Error, fs};
 use wasmer::{
-    imports, AsStoreMut, AsStoreRef, Function, FunctionEnv, FunctionEnvMut, Instance, Memory,
-    MemoryView, Module, RuntimeError, Store, Value, WasmPtr,
+    imports, AsStoreRef, Function, FunctionEnv, FunctionEnvMut, Instance, Memory, MemoryView,
+    Module, RuntimeError, Store, Value, WasmPtr,
 };
-
-#[derive(Debug)]
-pub enum BindHelperError {
-    Convert(String),
-}
-
-impl std::fmt::Display for BindHelperError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BindHelperError")
-    }
-}
 
 #[derive(Clone, Default)]
 pub struct Env {
@@ -66,24 +53,34 @@ impl Env {
         self.fn_new.as_ref().expect("can't get function")
     }
 
+    pub fn fn_pin(&self) -> &Function {
+        self.fn_pin.as_ref().expect("can't get function")
+    }
+
     pub fn set_fn_new(&mut self, fn_new: Function) {
         if self.fn_new.is_some() {
             panic!("fn_new of a Env can only be set once!");
         }
         self.fn_new = Some(fn_new);
     }
+
+    pub fn set_fn_pin(&mut self, fn_pin: Function) {
+        if self.fn_pin.is_some() {
+            panic!("fn_pin of a Env can only be set once!");
+        }
+        self.fn_pin = Some(fn_pin);
+    }
 }
 
-fn get_str_ptr(ctx: &mut FunctionEnvMut<'_, Env>) -> anyhow::Result<()> {
-    let new_str = String::from("hello, assemblyscript");
-    let new_str_size: i32 = new_str.len().try_into().expect("can't convert to i32");
+fn lower_string(ctx: &mut FunctionEnvMut<'_, Env>, value: &String) -> anyhow::Result<u32> {
     let env = ctx.data().to_owned();
 
+    let str_size: i32 = value.len().try_into()?;
     let result = env
         .fn_new()
-        .call(ctx, &[Value::I32(new_str_size << 1), Value::I32(1)])?;
+        .call(ctx, &[Value::I32(str_size << 1), Value::I32(1)])?;
 
-    let string_ptr = match result.get(0) {
+    let ptr = match result.get(0) {
         Some(v) => match v.i32() {
             Some(i) => i,
             _ => {
@@ -95,10 +92,25 @@ fn get_str_ptr(ctx: &mut FunctionEnvMut<'_, Env>) -> anyhow::Result<()> {
         }
     };
 
-    println!("{:?}", string_ptr);
-    Ok(())
+    let utf16: Vec<u16> = value.encode_utf16().collect();
+    let utf16_to_u8: &[u8] = bytemuck::try_cast_slice(&utf16.as_slice()).expect("qaq");
+
+    let view = env.memory_view(&ctx);
+
+    view.write(ptr as u64, utf16_to_u8)?;
+    env.fn_pin().call(ctx, &[Value::I32(ptr)])?;
+
+    Ok(ptr as u32)
 }
 
+fn get_string(mut ctx: FunctionEnvMut<'_, Env>) -> Result<u32, RuntimeError> {
+    let ptr = match lower_string(&mut ctx, &"Hello AssemblyScript!".to_string()) {
+        Ok(ptr) => ptr,
+        Err(err) => return Err(RuntimeError::new(err.to_string())),
+    };
+
+    Ok(ptr)
+}
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Hello, world!");
     let wasm_path = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/release.wasm");
@@ -112,7 +124,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let abort = |_: i32, _: i32, _: i32, _: i32| std::process::exit(-1);
 
-    fn test_log(mut ctx: FunctionEnvMut<'_, Env>, string_ptr: i32) {
+    fn test_log(ctx: FunctionEnvMut<'_, Env>, string_ptr: i32) {
         let env = &ctx.data().to_owned();
         let view = env.memory_view(&ctx);
 
@@ -125,29 +137,39 @@ fn main() -> Result<(), Box<dyn Error>> {
         let values = ptr.slice(&view, size as u32 / 2).expect("can't get by ptr");
         let values_sliced = values.read_to_vec().expect("qaq");
         let result = String::from_utf16_lossy(values_sliced.as_slice());
-        println!("{:#}", result);
 
-        get_str_ptr(&mut ctx);
+        println!("{:#}", result);
     }
-    
+
     let env = FunctionEnv::new(&mut store, Env::new());
     let import_object = imports! {
             "env" => {
             "abort" => Function::new_typed(&mut store, abort)
         },
         "index" => {
-            "log" => Function::new_typed_with_env(&mut store, &env , test_log)
+            "log" => Function::new_typed_with_env(&mut store, &env , test_log),
+            "getString" => Function::new_typed_with_env(&mut store, &env , get_string)
         }
     };
+
     let instance = Instance::new(&mut store, &module, &import_object)?;
     let memory = instance.exports.get_memory("memory")?;
-    let fn_new = instance.exports.get_function("__new")?;
 
     env.as_mut(&mut store).set_memory(memory.clone());
-    env.as_mut(&mut store).set_fn_new(fn_new.clone());
+
+    if let Ok(func) = instance.exports.get_function("__pin") {
+        env.as_mut(&mut store).set_fn_pin(func.clone());
+    }
+
+    if let Ok(func) = instance.exports.get_function("__new") {
+        env.as_mut(&mut store).set_fn_new(func.clone());
+    }
 
     let log_func = instance.exports.get_function("testLog")?;
-    log_func.call(&mut store, &[]).expect("call qaq");
+    log_func.call(&mut store, &[])?;
+
+    let test_get_string_func = instance.exports.get_function("testGetString")?;
+    test_get_string_func.call(&mut store, &[])?;
 
     Ok(())
 }

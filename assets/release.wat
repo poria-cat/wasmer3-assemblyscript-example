@@ -1,13 +1,14 @@
 (module
  (type $i32_=>_none (func (param i32)))
  (type $none_=>_none (func))
+ (type $none_=>_i32 (func (result i32)))
  (type $i32_i32_=>_none (func (param i32 i32)))
  (type $i32_i32_=>_i32 (func (param i32 i32) (result i32)))
  (type $i32_i32_i32_i32_=>_none (func (param i32 i32 i32 i32)))
  (type $i32_i32_i32_=>_none (func (param i32 i32 i32)))
- (type $none_=>_i32 (func (result i32)))
  (type $i32_=>_i32 (func (param i32) (result i32)))
  (import "index" "log" (func $assembly/index/log (param i32)))
+ (import "index" "getString" (func $assembly/index/getString (result i32)))
  (import "env" "abort" (func $~lib/builtins/abort (param i32 i32 i32 i32)))
  (global $~lib/rt/itcms/total (mut i32) (i32.const 0))
  (global $~lib/rt/itcms/threshold (mut i32) (i32.const 0))
@@ -23,7 +24,7 @@
  (global $~lib/memory/__stack_pointer (mut i32) (i32.const 18028))
  (memory $0 1)
  (data (i32.const 1036) ",")
- (data (i32.const 1048) "\01\00\00\00\1c\00\00\00h\00e\00l\00l\00o\00,\00 \00w\00a\00s\00m\00e\00r\00!")
+ (data (i32.const 1048) "\01\00\00\00\1a\00\00\00H\00e\00l\00l\00o\00 \00w\00a\00s\00m\00e\00r\00!")
  (data (i32.const 1084) "<")
  (data (i32.const 1096) "\01\00\00\00(\00\00\00A\00l\00l\00o\00c\00a\00t\00i\00o\00n\00 \00t\00o\00o\00 \00l\00a\00r\00g\00e")
  (data (i32.const 1148) "<")
@@ -39,7 +40,9 @@
  (data (i32.const 1548) "<")
  (data (i32.const 1560) "\01\00\00\00(\00\00\00O\00b\00j\00e\00c\00t\00 \00i\00s\00 \00n\00o\00t\00 \00p\00i\00n\00n\00e\00d")
  (data (i32.const 1616) "\03\00\00\00 \00\00\00\00\00\00\00 ")
+ (export "getString" (func $assembly/index/getString))
  (export "testLog" (func $assembly/index/testLog))
+ (export "testGetString" (func $assembly/index/testGetString))
  (export "__new" (func $~lib/rt/itcms/__new))
  (export "__pin" (func $~lib/rt/itcms/__pin))
  (export "__unpin" (func $~lib/rt/itcms/__unpin))
@@ -48,6 +51,38 @@
  (export "memory" (memory $0))
  (export "log" (func $export:assembly/index/log))
  (start $~start)
+ (func $assembly/index/testGetString
+  (local $0 i32)
+  global.get $~lib/memory/__stack_pointer
+  i32.const 4
+  i32.sub
+  global.set $~lib/memory/__stack_pointer
+  global.get $~lib/memory/__stack_pointer
+  i32.const 1644
+  i32.lt_s
+  if
+   i32.const 18048
+   i32.const 18096
+   i32.const 1
+   i32.const 1
+   call $~lib/builtins/abort
+   unreachable
+  end
+  global.get $~lib/memory/__stack_pointer
+  local.tee $0
+  i32.const 0
+  i32.store
+  local.get $0
+  call $assembly/index/getString
+  local.tee $0
+  i32.store
+  local.get $0
+  call $assembly/index/log
+  global.get $~lib/memory/__stack_pointer
+  i32.const 4
+  i32.add
+  global.set $~lib/memory/__stack_pointer
+ )
  (func $~lib/rt/itcms/visitRoots
   (local $0 i32)
   (local $1 i32)
