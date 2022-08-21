@@ -13,14 +13,22 @@ Hello wasmer!
 Hello AssemblyScript!
 ```
 
-If you want to edit  assemblyscript files, just edit them in `assembly/assembly` folder
+If you want to edit  assemblyscript files, just edit them in `assembly/assembly` folder.
 
-and run 
+Before buiild wasm, need run 
+
+```
+npm i
+```
+
+to install modules
+
+Then run:
 
 ```
 npm run asbuild
 ```
 
-to build wasm
+to build wasm.
 
-then copy `assembly/assembly/release.wasm`to `assets` folder
+After build, copy `assembly/assembly/release.wasm` to `assets` folder.
