@@ -132,7 +132,7 @@ fn get_string(mut ctx: FunctionEnvMut<'_, Env>) -> Result<u32, RuntimeError> {
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Hello, world!");
     let wasm_path = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/release.wasm");
-    // println!("Results: {:?}", wasm_bytes);
+
     let wasm_bytes = fs::read(wasm_path)?;
     let mut store = Store::default();
 
@@ -158,13 +158,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     env.as_mut(&mut store).set_memory(memory.clone());
 
-    if let Ok(func) = instance.exports.get_function("__pin") {
-        env.as_mut(&mut store).set_fn_pin(func.clone());
-    }
+    let fn_pin = instance.exports.get_function("__pin")?;
+    env.as_mut(&mut store).set_fn_pin(fn_pin.clone());
 
-    if let Ok(func) = instance.exports.get_function("__new") {
-        env.as_mut(&mut store).set_fn_new(func.clone());
-    }
+    let fn_new = instance.exports.get_function("__new")?;
+    env.as_mut(&mut store).set_fn_new(fn_new.clone());
 
     let log_func = instance.exports.get_function("testLog")?;
     log_func.call(&mut store, &[])?;

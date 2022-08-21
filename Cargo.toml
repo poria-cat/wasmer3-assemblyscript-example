@@ -1,5 +1,5 @@
 [package]
-name = "node"
+name = "wasmer3-assemblyscript"
 version = "0.1.0"
 edition = "2021"
 
