@@ -115,10 +115,7 @@ fn lower_string(ctx: &mut FunctionEnvMut<'_, Env>, value: &String) -> anyhow::Re
 }
 
 fn test_log(ctx: FunctionEnvMut<'_, Env>, string_ptr: i32) -> Result<(), RuntimeError> {
-    let result = match lift_string(&ctx, string_ptr) {
-        Ok(result) => result,
-        Err(err) => return Err(RuntimeError::new(err.to_string())),
-    };
+    let result = lift_string(&ctx, string_ptr).map_err(|e| RuntimeError::new(e.to_string()))?;
 
     println!("{:#}", result);
 
@@ -126,13 +123,12 @@ fn test_log(ctx: FunctionEnvMut<'_, Env>, string_ptr: i32) -> Result<(), Runtime
 }
 
 fn get_string(mut ctx: FunctionEnvMut<'_, Env>) -> Result<u32, RuntimeError> {
-    let ptr = match lower_string(&mut ctx, &"Hello AssemblyScript!".to_string()) {
-        Ok(ptr) => ptr,
-        Err(err) => return Err(RuntimeError::new(err.to_string())),
-    };
+    let ptr = lower_string(&mut ctx, &"Hello AssemblyScript!".to_string())
+        .map_err(|e| RuntimeError::new(e.to_string()))?;
 
     Ok(ptr)
 }
+
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Hello, world!");
     let wasm_path = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/release.wasm");
