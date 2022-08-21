@@ -114,7 +114,7 @@ fn lower_string(ctx: &mut FunctionEnvMut<'_, Env>, value: &String) -> anyhow::Re
     Ok(ptr as u32)
 }
 
-fn test_log(ctx: FunctionEnvMut<'_, Env>, string_ptr: i32) -> Result<(), RuntimeError> {
+fn log(ctx: FunctionEnvMut<'_, Env>, string_ptr: i32) -> Result<(), RuntimeError> {
     let result = lift_string(&ctx, string_ptr).map_err(|e| RuntimeError::new(e.to_string()))?;
 
     println!("{:#}", result);
@@ -148,7 +148,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "abort" => Function::new_typed(&mut store, abort)
         },
         "index" => {
-            "log" => Function::new_typed_with_env(&mut store, &env , test_log),
+            "log" => Function::new_typed_with_env(&mut store, &env , log),
             "getString" => Function::new_typed_with_env(&mut store, &env , get_string)
         }
     };
